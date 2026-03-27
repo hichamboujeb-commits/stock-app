@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestion Stock Cloud - جماعة تمسية</title>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        :root { --primary: #667eea; --danger: #dc3545; --warning: #ffc107; --success: #28a745; }
+        body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 10px; }
+        .container { max-width: 1400px; margin: 0 auto; background: white; border-radius: 20px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+        header { background: linear-gradient(135deg, var(--primary), #764ba2); color: white; padding: 20px; text-align: center; position: relative; }
+        .user-info { position: absolute; left: 20px; top: 50%; transform: translateY(-50%); display: flex; gap: 10px; align-items: center; background: rgba(255,255,255,0.2); padding: 10px 15px; border-radius: 25px; }
+        .connection-status { position: absolute; right: 20px; top: 50%; transform: translateY(-50%); display: flex; align-items: center; gap: 5px; font-size: 12px; background: rgba(255,255,255,0.2); padding: 5px 10px; border-radius: 15px; }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #28a745; animation: pulse 2s infinite; }
+        .status-dot.offline { background: #dc3545; animation: none; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .tabs { display: flex; background: #f8f9fa; border-bottom: 2px solid #dee2e6; overflow-x: auto; }
+        .tab { flex: 1; padding: 15px; text-align: center; cursor: pointer; font-weight: bold; border-bottom: 3px solid transparent; white-space: nowrap; min-width: 120px; }
+        .tab.active { color: var(--primary); border-bottom-color: var(--primary); background: white; }
+        .tab-content { display: none; padding: 20px; }
+        .tab-content.active { display: block; }
+        .stock-table-container { background: white; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); overflow: hidden; margin-top: 20px; }
+        .table-header { background: linear-gradient(135deg, var(--primary), #764ba2); color: white; padding: 15px; display: flex; justify-content: space-between; align-items: center; }
+        table { width: 100%; border-collapse: collapse; }
+        th { background: #f8f9fa; padding: 15px; text-align: right; font-weight: bold; border-bottom: 2px solid #dee2e6; }
+        td { padding: 12px 15px; border-bottom: 1px solid #e9ecef; }
+        tr.status-nafiz { background-color: #ffebee !important; border-right: 4px solid #dc3545; }
+        tr.status-low { background-color: #fff8e1 !important; border-right: 4px solid #ffc107; }
+        .badge { padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: bold; }
+        .badge-danger { background: #dc3545; color: white; animation: blink 2s infinite; }
+        .badge-warning { background: #ffc107; color: #000; }
+        .badge-success { background: #28a745; color: white; }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+        .qty-display { font-size: 18px; font-weight: bold; font-family: 'Courier New', monospace; }
+        .qty-nafiz { color: #dc3545; } .qty-low { color: #ff9800; } .qty-good { color: #28a745; }
+        .delivery-card { background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); border: 2px solid var(--primary); border-radius: 15px; padding: 25px; margin-bottom: 30px; }
+        .log-item { background: white; border-radius: 10px; padding: 15px; margin-bottom: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); border-right: 4px solid var(--primary); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+        .taken-box { background: #ffebee; color: #c62828; padding: 8px 15px; border-radius: 8px; font-weight: bold; text-align: center; }
+        .remaining-box { background: #e8f5e9; color: #2e7d32; padding: 8px 15px; border-radius: 8px; font-weight: bold; text-align: center; }
+        .modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 2000; justify-content: center; align-items: center; backdrop-filter: blur(5px); }
+        .modal-content { background: white; padding: 30px; border-radius: 15px; width: 90%; max-width: 500px; max-height: 80vh; overflow-y: auto; }
+        .welcome-alert { background: linear-gradient(135deg, #fff3cd 0%, #ffeeba 100%); border: 3px solid #ffc107; border-radius: 15px; padding: 25px; margin-bottom: 20px; }
+        .welcome-alert.danger { background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%); border-color: #dc3545; }
+        .alert-title { font-size: 20px; font-weight: bold; color: #856404; margin-bottom: 15px; display: flex; align-items: center; gap: 10px; }
+        .alert-title.danger { color: #721c24; }
+        .alert-item-small { background: white; padding: 10px 15px; border-radius: 8px; margin-bottom: 8px; border-right: 4px solid #dc3545; display: flex; justify-content: space-between; align-items: center; }
+        .btn { padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; transition: all 0.3s; }
+        .btn-primary { background: var(--primary); color: white; } .btn-success { background: #28a745; color: white; }
+        .btn-danger { background: #dc3545; color: white; } .btn-warning { background: #ffc107; color: #000; }
+        .btn-secondary { background: #6c757d; color: white; } .btn-small { padding: 5px 10px; font-size: 12px; }
+        .icon-btn { background: rgba(255,255,255,0.3); border: none; color: white; width: 35px; height: 35px; border-radius: 50%; cursor: pointer; font-size: 18px; }
+        .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        .input-group { display: flex; flex-direction: column; }
+        label { font-weight: bold; margin-bottom: 5px; color: #495057; font-size: 14px; }
+        input, select { padding: 10px; border: 2px solid #dee2e6; border-radius: 8px; font-size: 16px; }
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        .stat-card { background: white; padding: 20px; border-radius: 10px; text-align: center; box-shadow: 0 2px 10px rgba(0,0,0,0.1); border-top: 4px solid var(--primary); }
+        .stat-value { font-size: 32px; font-weight: bold; color: var(--primary); }
+        .empty { text-align: center; padding: 40px; color: #6c757d; }
+        .loading { text-align: center; padding: 40px; color: var(--primary); font-size: 18px; }
+        .login-box { max-width: 400px; margin: 100px auto; background: white; padding: 40px; border-radius: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+        .sync-info { background: #e3f2fd; padding: 10px; border-radius: 8px; margin-bottom: 20px; font-size: 14px; color: #1976d2; border-right: 4px solid #2196f3; }
+        @media (max-width: 768px) { .user-info, .connection-status { position: static; transform: none; margin: 10px auto; } header { padding-top: 10px; } .log-item { flex-direction: column; align-items: flex-start; } }
+    </style>
+</head>
+<body>
+
+<!-- نافذة التنبيه -->
+<div id="welcomeModal" class="modal" style="display: none; z-index: 3000;">
+    <div class="modal-content" style="max-width: 600px;">
+        <div id="welcomeContent"></div>
+        <button class="btn btn-primary" style="width: 100%; margin-top: 20px;" onclick="closeWelcome()">فهمت، اذهب للمخزون</button>
+    </div>
+</div>
+
+<!-- نافذة تغيير الباسورد -->
+<div id="passwordModal" class="modal">
+    <div class="modal-content">
+        <h3 style="margin-bottom: 20px;">🔐 تغيير كلمة المرور</h3>
+        <div class="input-group" style="margin-bottom: 15px;"><label>الباسورد الحالي</label><input type="password" id="currentPassword"></div>
+        <div class="input-group" style="margin-bottom: 15px;"><label>الباسورد الجديد</label><input type="password" id="newPassword"></div>
+        <div class="input-group" style="margin-bottom: 20px;"><label>تأكيد الباسورد الجديد</label><input type="password" id="confirmPassword"></div>
+        <div style="display: flex; gap: 10px;">
+            <button class="btn btn-primary" style="flex: 1;" onclick="changePassword()">حفظ</button>
+            <button class="btn btn-secondary" onclick="closePasswordModal()">إلغاء</button>
+        </div>
+    </div>
+</div>
+
+<!-- شاشة الدخول -->
+<div id="loginScreen" class="login-box">
+    <h2 style="text-align: center; margin-bottom: 20px; color: var(--primary);">☁️ تسجيل الدخول للنظام السحابي</h2>
+    <div class="sync-info" style="margin-bottom: 20px;">
+        ☁️ البيانات محفوظة في السحابة<br>
+        متاحة من أي جهاز وفي أي وقت
+    </div>
+    <div class="input-group" style="margin-bottom: 15px;">
+        <label>👤 اسم المستخدم</label>
+        <input type="text" id="username" placeholder="اكتب اسمك">
+    </div>
+    <div class="input-group" style="margin-bottom: 20px;">
+        <label>🔑 كلمة المرور</label>
+        <input type="password" id="userPassword" placeholder="••••••">
+    </div>
+    <button class="btn btn-primary" style="width: 100%;" onclick="login()">دخول للنظام</button>
+    <p style="text-align: center; margin-top: 15px; color: #666; font-size: 12px;">
+        اي اسم يعمل / اي باسورد (للتجربة)
+    </p>
+</div>
+
+<!-- التطبيق الرئيسي -->
+<div id="app" class="container" style="display: none;">
+    <header>
+        <div>
+            <h1>☁️ Gestion Stock Cloud</h1>
+            <p style="opacity: 0.9; font-size: 14px;">جماعة تمسية - النظام السحابي للمخزون</p>
+        </div>
+        <div class="connection-status">
+            <div class="status-dot" id="statusDot"></div>
+            <span id="statusText">متصل</span>
+        </div>
+        <div class="user-info">
+            <span>👤 <span id="currentUserName" style="font-weight: bold;">User</span></span>
+            <button class="icon-btn" onclick="openPasswordModal()" title="تغيير الباسورد">🔐</button>
+            <button class="btn btn-danger btn-small" onclick="logout()">🚪 خروج</button>
+        </div>
+    </header>
+    
+    <div class="tabs">
+        <div class="tab active" onclick="switchTab('stock')">📦 المخزون</div>
+        <div class="tab" onclick="switchTab('delivery')">📝 تسليم جديد</div>
+        <div class="tab" onclick="switchTab('deliveries')">📋 سجل التسليمات</div>
+        <div class="tab" onclick="switchTab('alerts')">🔔 التنبيهات <span id="alertBadge" style="background: #dc3545; color: white; padding: 2px 8px; border-radius: 10px; font-size: 12px; display: none;">0</span></div>
+    </div>
+    
+    <!-- المخزون -->
+    <div id="stockTab" class="tab-content active">
+        <div class="sync-info">
+            <strong>☁️ متصل بقاعدة البيانات:</strong> https://stock-temsia-default-rtdb.firebaseio.com/<br>
+            <small>جميع التغييرات تُحفظ تلقائياً في السحابة</small>
+        </div>
+        
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-value" id="totalProducts">0</div>
+                <div>إجمالي المنتجات</div>
+            </div>
+            <div class="stat-card" style="border-color: #dc3545;">
+                <div class="stat-value" id="nafizCount" style="color: #dc3545;">0</div>
+                <div>نفذت الكمية</div>
+            </div>
+            <div class="stat-card" style="border-color: #ffc107;">
+                <div class="stat-value" id="lowCount" style="color: #ff9800;">0</div>
+                <div>شارفت على النفاذ</div>
+            </div>
+        </div>
+        
+        <div id="mainAlert" class="welcome-alert" style="display: none;">
+            <div class="alert-title danger">⚠️ تنبيه: منتجات قرب يسالو من المخزون!</div>
+            <div id="mainAlertContent"></div>
+        </div>
+        
+        <div class="form-grid" style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+            <div class="input-group">
+                <label>📁 الفئة</label>
+                <select id="category">
+                    <option value="informatique">💻 إعلاميات</option>
+                    <option value="bureau">🪑 أثاث المكتب</option>
+                    <option value="kitab">📚 خاص بالمكتب</option>
+                    <option value="cleaning">🧹 تنظيف</option>
+                    <option value="other">⚙️ أخرى</option>
+                </select>
+            </div>
+            <div class="input-group">
+                <label>🏷️ اسم المنتج</label>
+                <input type="text" id="pName" placeholder="مثال: ورق A4">
+            </div>
+            <div class="input-group">
+                <label>📊 الكمية الحالية</label>
+                <input type="number" id="pQty" placeholder="0" min="0">
+            </div>
+            <div class="input-group">
+                <label>⚠️ الحد الأدنى للتنبيه</label>
+                <input type="number" id="pMin" value="10" min="1">
+                <small style="color: #666;">عند الوصول لهذا العدد يظهر التنبيه</small>
+            </div>
+            <div class="input-group">
+                <label>📍 موقع التخزين</label>
+                <input type="text" id="pLocation" placeholder="المستودع أ">
+            </div>
+        </div>
+        
+        <div style="margin-bottom: 20px;">
+            <button class="btn btn-primary" onclick="addProduct()">➕ إضافة للمخزون</button>
+            <button class="btn btn-success" onclick="exportToExcel()">📊 Excel</button>
+            <button class="btn btn-secondary" onclick="syncData()">🔄 تحديث</button>
+        </div>
+        
+        <div class="stock-table-container">
+            <div class="table-header">
+                <span>📦 جدول المخزون (متزامن مع السحابة)</span>
+                <span id="lastUpdate" style="font-size: 12px; opacity: 0.9;">جاري الاتصال...</span>
+            </div>
+            <div style="overflow-x: auto;">
+                <table id="stockTable">
+                    <thead>
+                        <tr>
+                            <th>الحالة</th>
+                            <th>الفئة</th>
+                            <th>اسم المنتج</th>
+                            <th>المتوفر حالياً</th>
+                            <th>الحد الأدنى</th>
+                            <th>الموقع</th>
+                            <th>بواسطة</th>
+                            <th>إجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody">
+                        <tr><td colspan="8" class="loading">⏳ جاري الاتصال بقاعدة البيانات...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <!-- التسليم -->
+    <div id="deliveryTab" class="tab-content">
+        <div class="delivery-card">
+            <h3 style="margin-bottom: 20px; color: var(--primary);">📝 نموذج تسليم منتج</h3>
+            <div style="background: #fff3cd; padding: 10px; border-radius: 8px; margin-bottom: 20px; font-size: 14px;">
+                💡 عند التسليم، سيتم خصم الكمية تلقائياً من المخزون في السحابة
+            </div>
+            
+            <div class="form-grid" style="background: white;">
+                <div class="input-group">
+                    <label>📦 اختر المنتج *</label>
+                    <select id="deliveryProduct" onchange="updateAvailableQty()">
+                        <option value="">-- اختر المنتج --</option>
+                    </select>
+                    <div id="availableText" style="margin-top: 5px; font-size: 14px; color: #666;">
+                        المتوفر: <span style="font-weight: bold; color: #333;">-</span>
+                    </div>
+                </div>
+                
+                <div class="input-group">
+                    <label>👤 اسم المستفيد *</label>
+                    <input type="text" id="deliveryRecipient" placeholder="اسم الشخص بالكامل">
+                </div>
+                
+                <div class="input-group">
+                    <label>📊 الكمية المسلمة *</label>
+                    <input type="number" id="deliveryQty" placeholder="0" min="1">
+                    <div id="qtyWarning" style="color: #dc3545; font-size: 13px; margin-top: 5px; display: none;">
+                        ⚠️ الكمية المطلوبة أكبر من المتوفرة!
+                    </div>
+                </div>
+                
+                <div class="input-group">
+                    <label>📝 ملاحظات</label>
+                    <input type="text" id="deliveryNotes" placeholder="أي ملاحظات...">
+                </div>
+            </div>
+            
+            <button class="btn btn-success" onclick="makeDelivery()" style="width: 100%; padding: 15px; font-size: 18px;">
+                ✅ تأكيد التسليم وخصم من المخزون
+            </button>
+        </div>
+    </div>
+    
+    <!-- سجل التسليمات -->
+    <div id="deliveriesTab" class="tab-content">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <div>
+                <h3 style="margin: 0;">📋 سجل التسليمات</h3>
+                <p style="color: #666; margin-top: 5px; font-size: 14px;">متزامن مع جميع الأجهزة</p>
+            </div>
+            <button class="btn btn-danger" onclick="clearOldDeliveries()">🗑️ مسح السجل القديم</button>
+        </div>
+        
+        <div style="background: #e3f2fd; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
+            <span style="color: #c62828; font-weight: bold;">🔴 أخذ = الكمية المخرجة</span>
+            <span style="margin: 0 20px; color: #2e7d32; font-weight: bold;">🟢 بقي = المتبقي في المخزون</span>
+        </div>
+        
+        <div id="deliveriesList">
+            <div class="loading">⏳ جاري التحميل من السحابة...</div>
+        </div>
+    </div>
+    
+    <!-- التنبيهات -->
+    <div id="alertsTab" class="tab-content">
+        <h3 style="margin-bottom: 20px; color: #dc3545;">⚠️ منتجات تحتاج انتباهك</h3>
+        <div id="alertsList">
+            <div class="loading">⏳ جاري التحميل...</div>
+        </div>
+    </div>
+</div>
+
+<script>
+// ⚠️ إعدادات Firebase - استخدم الرابط اللي عطيتيني
+const firebaseConfig = {
+    apiKey: "AIzaSyDummyKeyForStockTemsia123456789", // API Key (يمكن تغييره لاحقاً)
+    authDomain: "stock-temsia.firebaseapp.com",
+    databaseURL: "https://stock-temsia-default-rtdb.firebaseio.com/", // الرابط ديالك
+    projectId: "stock-temsia",
+    storageBucket: "stock-temsia.appspot.com",
+    messagingSenderId: "123456789",
+    appId: "1:123456789:web:abcdef123456"
+};
+
+// تهيئة Firebase
+let app, database;
+let currentUser = null;
+let products = [];
+let deliveries = [];
+let userPasswords = {}; // تخزين مؤقت للباسوردات
+
+try {
+    app = firebase.initializeApp(firebaseConfig);
+    database = firebase.database();
+    console.log("✅ متصل بـ Firebase:", firebaseConfig.databaseURL);
+} catch(e) {
+    console.error("❌ خطأ في الاتصال:", e);
+    alert("⚠️ خطأ في الاتصال بقاعدة البيانات");
+}
+
+// مراقبة حالة الاتصال
+if(database) {
+    database.ref('.info/connected').on('value', (snap) => {
+        const connected = snap.val();
+        const dot = document.getElementById('statusDot');
+        const text = document.getElementById('statusText');
+        if(connected) {
+            dot.classList.remove('offline');
+            text.textContent = 'متصل بالسحابة ☁️';
+        } else {
+            dot.classList.add('offline');
+            text.textContent = 'غير متصل ❌';
+        }
+    });
+}
+
+function login() {
+    const username = document.getElementById('username').value.trim();
+    const password = document.getElementById('userPassword').value;
+    
+    if(!username) {
+        alert('الرجاء إدخال اسم المستخدم');
+        return;
+    }
+    
+    // حفظ الباسورد إذا كان جديد
+    if(!userPasswords[username]) {
+        userPasswords[username] = password || '123456';
+    } else if(userPasswords[username] !== password) {
+        alert('كلمة المرور خاطئة!');
+        return;
+    }
+    
+    currentUser = { name: username };
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    document.getElementById('currentUserName').textContent = username;
+    
+    // تحميل البيانات من السحابة
+    loadDataFromCloud();
+}
+
+function logout() {
+    currentUser = null;
+    products = [];
+    deliveries = [];
+    document.getElementById('loginScreen').style.display = 'block';
+    document.getElementById('app').style.display = 'none';
+    document.getElementById('username').value = '';
+    document.getElementById('userPassword').value = '';
+}
+
+function openPasswordModal() {
+    document.getElementById('passwordModal').style.display = 'flex';
+}
+
+function closePasswordModal() {
+    document.getElementById('passwordModal').style.display = 'none';
+}
+
+function changePassword() {
+    const current = document.getElementById('currentPassword').value;
+    const newPass = document.getElementById('newPassword').value;
+    const confirm = document.getElementById('confirmPassword').value;
+    
+    if(userPasswords[currentUser.name] !== current) {
+        alert('الباسورد الحالي غير صحيح!');
+        return;
+    }
+    
+    if(newPass !== confirm) {
+        alert('الباسورد الجديد غير متطابق!');
+        return;
+    }
+    
+    if(newPass.length < 4) {
+        alert('الباسورد قصير جداً (4 أحرف على الأقل)');
+        return;
+    }
+    
+    userPasswords[currentUser.name] = newPass;
+    alert('✅ تم تغيير الباسورد بنجاح!');
+    closePasswordModal();
+}
+
+function switchTab(tab) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    
+    const tabs = {'stock': 0, 'delivery': 1, 'deliveries': 2, 'alerts': 3};
+    document.querySelectorAll('.tab')[tabs[tab]].classList.add('active');
+    document.getElementById(tab + 'Tab').classList.add('active');
+    
+    if(tab === 'deliveries') renderDeliveries();
+    if(tab === 'alerts') renderAlerts();
+    if(tab === 'delivery') updateProductSelect();
+}
+
+// تحميل البيانات من السحابة (Realtime)
+function loadDataFromCloud() {
+    if(!database) {
+        alert('⚠️ لا يوجد اتصال بقاعدة البيانات');
+        return;
+    }
+    
+    // تحميل المنتجات
+    database.ref('products').on('value', (snapshot) => {
+        products = [];
+        snapshot.forEach((childSnapshot) => {
+            products.push({ 
+                id: childSnapshot.key, 
+                ...childSnapshot.val() 
+            });
+        });
+        renderTable();
+        updateProductSelect();
+        showWelcomeAlert();
+    });
+    
+    // تحميل التسليمات
+    database.ref('deliveries').on('value', (snapshot) => {
+        deliveries = [];
+        snapshot.forEach((childSnapshot) => {
+            deliveries.push({ 
+                id: childSnapshot.key, 
+                ...childSnapshot.val() 
+            });
+        });
+        renderDeliveries();
+    });
+}
+
+function syncData() {
+    document.getElementById('lastUpdate').textContent = '⏳ جاري التحديث...';
+    setTimeout(() => {
+        document.getElementById('lastUpdate').textContent = '✅ محدث: ' + new Date().toLocaleTimeString('ar-MA');
+    }, 1000);
+}
+
+function addProduct() {
+    if(!database || !currentUser) {
+        alert('⚠️ لا يوجد اتصال');
+        return;
+    }
+    
+    const name = document.getElementById('pName').value.trim();
+    const qty = parseInt(document.getElementById('pQty').value);
+    const min = parseInt(document.getElementById('pMin').value);
+    const cat = document.getElementById('category').value;
+    const loc = document.getElementById('pLocation').value.trim();
+    
+    if(!name || isNaN(qty)) {
+        alert('الرجاء ملء اسم المنتج والكمية');
+        return;
+    }
+    
+    const newProductRef = database.ref('products').push();
+    newProductRef.set({
+        name: name,
+        qty: qty,
+        min: min,
+        cat: cat,
+        loc: loc,
+        createdBy: currentUser.name,
+        createdAt: firebase.database.ServerValue.TIMESTAMP,
+        lastModified: firebase.database.ServerValue.TIMESTAMP
+    }).then(() => {
+        alert(✅ تم إضافة ${name} للمخزون السحابي بنجاح!);
+        document.getElementById('pName').value = '';
+        document.getElementById('pQty').value = '';
+    }).catch(err => {
+        alert('❌ خطأ: ' + err.message);
+    });
+}
+
+function updateProductSelect() {
+    const select = document.getElementById('deliveryProduct');
+    select.innerHTML = '<option value="">-- اختر المنتج --</option>';
+    
+    products.filter(p => p.qty > 0)
+        .sort((a,b) => a.name.localeCompare(b.name))
+        .forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.id;
+            opt.textContent = ${p.name} (متاح: ${p.qty});
+            select.appendChild(opt);
+        });
+}
+
+function updateAvailableQty() {
+    const id = document.getElementById('deliveryProduct').value;
+    const text = document.querySelector('#availableText span');
+    
+    if(!id) {
+        text.textContent = '-';
+        return;
+    }
+    
+    const p = products.find(x => x.id === id);
+    if(p) {
+        text.textContent = p.qty + ' وحدة';
+        text.style.color = p.qty < 5 ? '#dc3545' : '#28a745';
+        text.style.fontWeight = 'bold';
+    }
+}
+
+function makeDelivery() {
+    const pid = document.getElementById('deliveryProduct').value;
+    const recipient = document.getElementById('deliveryRecipient').value.trim();
+    const qty = parseInt(document.getElementById('deliveryQty').value);
+    const notes = document.getElementById('deliveryNotes').value.trim();
+    
+    if(!pid || !recipient || !qty) {
+        alert('الرجاء ملء جميع الحقول المطلوبة');
+        return;
+    }
+    
+    const p = products.find(x => x.id === pid);
+    if(!p) return;
+    
+    if(qty > p.qty) {
+        alert(❌ الكمية غير كافية!\nالمتوفر: ${p.qty}\nالمطلوب: ${qty});
+        return;
+    }
+    
+    // خصم من المخزون في السحابة
+    const newQty = p.qty - qty;
+    
+    database.ref('products/' + pid).update({
+        qty: newQty,
+        lastModified: firebase.database.ServerValue.TIMESTAMP
+    }).then(() => {
+        // حفظ التسليم في السحابة
+        const deliveryRef = database.ref('deliveries').push();
+        return deliveryRef.set({
+            productName: p.name,
+            category: p.cat,
+            recipient: recipient,
+            qtyTaken: qty,        // أخذ
+            qtyRemaining: newQty, // بقي
+            deliverer: currentUser.name,
+            date: new Date().toLocaleString('ar-MA'),
+            timestamp: firebase.database.ServerValue.TIMESTAMP,
+            notes: notes
+        });
+    }).then(() => {
+        alert(✅ تم التسليم بنجاح!\n\nالمنتج: ${p.name}\nأخذ: ${qty} وحدة\nبقي في المخزون: ${newQty} وحدة);
+        
+        // تفريغ النموذج
+        document.getElementById('deliveryProduct').value = '';
+        document.getElementById('deliveryRecipient').value = '';
+        document.getElementById('deliveryQty').value = '';
+        document.getElementById('deliveryNotes').value = '';
+        updateAvailableQty();
+    }).catch(err => {
+        alert('❌ خطأ: ' + err.message);
+    });
+}
+
+// مسح السجل القديم من السحابة
+function clearOldDeliveries() {
+    if(deliveries.length === 0) {
+        alert('لا يوجد سجل لمسحه!');
+        return;
+    }
+    
+    const count = deliveries.length;
+    if(!confirm(هل أنت متأكد من مسح سجل التسليمات؟\nالعدد: ${count} عملية\n\n⚠️ لا يمكن التراجع عن هذا الإجراء!)) {
+        return;
+    }
+    
+    const confirmText = prompt('اكتب "نعم" للتأكيد النهائي:');
+    if(confirmText !== 'نعم') {
+        alert('تم إلغاء العملية');
+        return;
+    }
+    
+    database.ref('deliveries').remove()
+        .then(() => {
+            alert('✅ تم مسح سجل التسليمات بنجاح من السحابة!');
+        })
+        .catch(err => {
+            alert('❌ خطأ: ' + err.message);
+        });
+}
+
+function renderTable() {
+    const tbody = document.getElementById('tableBody');
+    tbody.innerHTML = '';
+    
+    if(products.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="empty">لا توجد منتجات في المخزون السحابي</td></tr>';
+        updateStats(0, 0);
+        return;
+    }
+    
+    let nafiz = 0, low = 0;
+    const lowProducts = [];
+    
+    products.forEach(p => {
+        const isNafiz = p.qty === 0;
+        const isLow = p.qty > 0 && p.qty <= p.min;
+        
+        if(isNafiz) nafiz++;
+        else if(isLow) { low++; lowProducts.push(p); }
+        
+        const rowClass = isNafiz ? 'status-nafiz' : (isLow ? 'status-low' : '');
+        const statusBadge = isNafiz ? '<span class="badge badge-danger">نفذت</span>' : 
+                           isLow ? '<span class="badge badge-warning">منخفض</span>' : 
+                           '<span class="badge badge-success">متوفر</span>';
+        const qtyClass = isNafiz ? 'qty-nafiz' : isLow ? 'qty-low' : 'qty-good';
+        
+        const tr = document.createElement('tr');
+        tr.className = rowClass;
+        tr.innerHTML = `
+            <td>${statusBadge}</td>
+            <td>${getCatName(p.cat)}</td>
+            <td><strong>${p.name}</strong></td>
+            <td class="qty-display ${qtyClass}">${p.qty}</td>
+            <td>${p.min}</td>
+            <td>${p.loc || '-'}</td>
+            <td style="font-size: 12px; color: #666;">${p.createdBy || '-'}</td>
+            <td>
+                <button class="btn btn-success btn-small" onclick="quickDelivery('${p.id}')" title="تسليم سريع">📤</button>
+                <button class="btn btn-danger btn-small" onclick="deleteProduct('${p.id}')" title="حذف">🗑</button>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+    
+    updateStats(nafiz, low);
+    updateMainAlert(lowProducts);
+}
+
+function updateStats(nafiz, low) {
+    document.getElementById('nafizCount').textContent = nafiz;
+    document.getElementById('lowCount').textContent = low;
+    document.getElementById('totalProducts').textContent = products.length;
+    document.getElementById('lastUpdate').textContent = '✅ محدث: ' + new Date().toLocaleTimeString('ar-MA');
+    
+    const badge = document.getElementById('alertBadge');
+    if(nafiz + low > 0) {
+        badge.style.display = 'inline';
+        badge.textContent = nafiz + low;
+    } else {
+        badge.style.display = 'none';
+    }
+}
+
+function updateMainAlert(lowProducts) {
+    const alertDiv = document.getElementById('mainAlert');
+    const alertContent = document.getElementById('mainAlertContent');
+    
+    if(lowProducts.length > 0) {
+        alertDiv.style.display = 'block';
+        let html = '';
+        lowProducts.slice(0, 3).forEach(p => {
+            html += `
+                <div class="alert-item-small">
+                    <strong>${p.name}</strong>
+                    <span style="color: #dc3545; font-weight: bold;">بقي: ${p.qty}</span>
+                </div>
+            `;
+        });
+        if(lowProducts.length > 3) {
+            html += <div style="text-align: center; color: #666; margin-top: 10px;">... و ${lowProducts.length - 3} منتجات أخرى</div>;
+        }
+        alertContent.innerHTML = html;
+    } else {
+        alertDiv.style.display = 'none';
+    }
+}
+
+function showWelcomeAlert() {
+    const modal = document.getElementById('welcomeModal');
+    const content = document.getElementById('welcomeContent');
+    const lowProducts = products.filter(p => p.qty <= p.min);
+    
+    if(lowProducts.length === 0) {
+        content.innerHTML = `
+            <div style="text-align: center; color: #28a745;">
+                <div style="font-size: 60px; margin-bottom: 20px;">✅</div>
+                <h2 style="color: #28a745;">المخزون في حالة جيدة!</h2>
+                <p>جميع المنتجات متوفرة بكميات كافية (أكبر من الحد الأدنى)</p>
+                <p style="margin-top: 10px; color: #666;">إجمالي المنتجات: ${products.length}</p>
+            </div>
+        `;
+    } else {
+        const nafiz = lowProducts.filter(p => p.qty === 0).length;
+        const low = lowProducts.filter(p => p.qty > 0).length;
+        
+        let html = `
+            <div class="alert-title danger">
+                ⚠️ تنبيه: ${lowProducts.length} منتجات قرب يسالو من المخزون!
+            </div>
+            <div style="margin-bottom: 15px;">
+                <span style="background: #dc3545; color: white; padding: 5px 15px; border-radius: 20px; margin-left: 10px;">نفذت: ${nafiz}</span>
+                <span style="background: #ffc107; padding: 5px 15px; border-radius: 20px;">شارفت: ${low}</span>
+            </div>
+            <div style="max-height: 300px; overflow-y: auto;">
+        `;
+        
+        lowProducts.forEach(p => {
+            const isNafiz = p.qty === 0;
+            html += `
+                <div class="alert-item-small" style="${isNafiz ? 'background: #ffebee;' : ''}">
+                    <div>
+                        <strong style="color: ${isNafiz ? '#dc3545' : '#ff9800'};">${p.name}</strong>
+                        <div style="font-size: 12px; color: #666;">${getCatName(p.cat)}</div>
+                    </div>
+                    <div style="font-size: 20px; font-weight: bold; color: ${isNafiz ? '#dc3545' : '#ff9800'};">
+                        ${p.qty}
+                    </div>
+                </div>
+            `;
+        });
+        
+        html += `</div>
+            <div style="background: #fff3cd; padding: 10px; border-radius: 8px; font-size: 14px; color: #856404; margin-top: 10px;">
+                💡 اقتراح: توجه إلى تبويب "التنبيهات" لمعرفة التفاصيل الكاملة
+            </div>
+        `;
+        
+        content.innerHTML = html;
+    }
+    
+    modal.style.display = 'flex';
+}
+
+function closeWelcome() {
+    document.getElementById('welcomeModal').style.display = 'none';
+}
+
+function getCatName(cat) {
+    const map = {
+        informatique: '💻 إعلاميات',
+        bureau: '🪑 أثاث المكتب',
+        kitab: '📚 خاص بالمكتب',
+        cleaning: '🧹 تنظيف',
+        other: '⚙️ أخرى'
+    };
+    return map[cat] || cat;
+}
+
+function quickDelivery(pid) {
+    switchTab('delivery');
+    document.getElementById('deliveryProduct').value = pid;
+    updateAvailableQty();
+}
+
+function deleteProduct(id) {
+    if(!confirm('حذف هذا المنتج من السحابة؟')) return;
+    
+    database.ref('products/' + id).remove()
+        .then(() => alert('✅ تم الحذف من السحابة'))
+        .catch(err => alert('❌ خطأ: ' + err.message));
+}
+
+function renderDeliveries() {
+    const container = document.getElementById('deliveriesList');
+    
+    if(deliveries.length === 0) {
+        container.innerHTML = '<div class="empty">لا توجد تسليمات مسجلة في السحابة</div>';
+        return;
+    }
+    
+    container.innerHTML = deliveries.map(d => `
+        <div class="log-item">
+            <div style="flex: 1;">
+                <div style="font-weight: bold; margin-bottom: 5px; font-size: 16px;">
+                    ${d.productName} ← ${d.recipient}
+                </div>
+                <div style="font-size: 13px; color: #666;">
+                    📅 ${d.date} | 🧑‍💼 سلّم: ${d.deliverer}
+                    ${d.notes ? ' | 📝 ' + d.notes : ''}
+                </div>
+            </div>
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <div class="taken-box">
+                    <div style="font-size: 11px;">أخذ</div>
+                    <div style="font-size: 18px;">${d.qtyTaken}</div>
+                </div>
+                <div style="color: #ccc; font-size: 20px;">➔</div>
+                <div class="remaining-box">
+                    <div style="font-size: 11px;">بقي</div>
+                    <div style="font-size: 18px;">${d.qtyRemaining}</div>
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+function renderAlerts() {
+    const container = document.getElementById('alertsList');
+    const alerts = products.filter(p => p.qty <= p.min).sort((a,b) => a.qty - b.qty);
+    
+    if(alerts.length === 0) {
+        container.innerHTML = '<div class="empty" style="color: #28a745; font-size: 18px;">✅ لا توجد تنبيهات - المخزون جيد</div>';
+        return;
+    }
+    
+    container.innerHTML = alerts.map(p => {
+        const isNafiz = p.qty === 0;
+        return `
+            <div style="background: ${isNafiz ? '#ffebee' : '#fff8e1'}; border: 2px solid ${isNafiz ? '#dc3545' : '#ffc107'}; border-radius: 10px; padding: 15px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <strong style="font-size: 18px; color: ${isNafiz ? '#dc3545' : '#ff9800'};">${p.name}</strong>
+                    <div style="color: #666; font-size: 14px; margin-top: 5px;">
+                        ${getCatName(p.cat)} | ${p.loc || 'غير محدد'}
+                    </div>
+                </div>
+                <div style="text-align: center;">
+                    <div style="font-size: 24px; font-weight: bold; color: ${isNafiz ? '#dc3545' : '#ff9800'};">
+                        ${p.qty}
+                    </div>
+                    <div style="font-size: 12px; color: #666;">من أصل ${p.min}</div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function exportToExcel() {
+    const data = products.map(p => ({
+        'الحالة': p.qty === 0 ? 'نفذ' : p.qty <= p.min ? 'منخفض' : 'متوفر',
+        'الفئة': getCatName(p.cat).replace(/[^\w\s\u0600-\u06FF]/g, ''),
+        'المنتج': p.name,
+        'المتوفر': p.qty,
+        'الحد الأدنى': p.min,
+        'الموقع': p.loc || '-',
+        'بواسطة': p.createdBy || '-'
+    }));
+    
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "المخزون");
+    XLSX.writeFile(wb, مخزون_تمسية_${new Date().toLocaleDateString()}.xlsx);
+}
+
+// إغلاق النوافذ بالنقر خارجها
+window.onclick = function(e) {
+    if(e.target.classList.contains('modal')) {
+        e.target.style.display = 'none';
+    }
+}
+</script>
+
+</body>
+</html>
