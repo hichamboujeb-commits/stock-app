@@ -495,7 +495,7 @@ function addProduct() {
         createdAt: firebase.database.ServerValue.TIMESTAMP,
         lastModified: firebase.database.ServerValue.TIMESTAMP
     }).then(() => {
-        alert(✅ تم إضافة ${name} للمخزون السحابي بنجاح!);
+        alert(`✅ تم إضافة ${name} للمخزون السحابي بنجاح!`);
         document.getElementById('pName').value = '';
         document.getElementById('pQty').value = '';
     }).catch(err => {
@@ -512,7 +512,7 @@ function updateProductSelect() {
         .forEach(p => {
             const opt = document.createElement('option');
             opt.value = p.id;
-            opt.textContent = ${p.name} (متاح: ${p.qty});
+            opt.textContent = `${p.name} (متاح: ${p.qty})`;
             select.appendChild(opt);
         });
 }
@@ -549,7 +549,7 @@ function makeDelivery() {
     if(!p) return;
     
     if(qty > p.qty) {
-        alert(❌ الكمية غير كافية!\nالمتوفر: ${p.qty}\nالمطلوب: ${qty});
+        alert(`❌ الكمية غير كافية!\nالمتوفر: ${p.qty}\nالمطلوب: ${qty}`);
         return;
     }
     
@@ -574,7 +574,7 @@ function makeDelivery() {
             notes: notes
         });
     }).then(() => {
-        alert(✅ تم التسليم بنجاح!\n\nالمنتج: ${p.name}\nأخذ: ${qty} وحدة\nبقي في المخزون: ${newQty} وحدة);
+        alert(`✅ تم التسليم بنجاح!\n\nالمنتج: ${p.name}\nأخذ: ${qty} وحدة\nبقي في المخزون: ${newQty} وحدة`);
         
         // تفريغ النموذج
         document.getElementById('deliveryProduct').value = '';
@@ -595,7 +595,7 @@ function clearOldDeliveries() {
     }
     
     const count = deliveries.length;
-    if(!confirm(هل أنت متأكد من مسح سجل التسليمات؟\nالعدد: ${count} عملية\n\n⚠️ لا يمكن التراجع عن هذا الإجراء!)) {
+    if(!confirm(`هل أنت متأكد من مسح سجل التسليمات؟\nالعدد: ${count} عملية\n\n⚠️ لا يمكن التراجع عن هذا الإجراء!`)) {
         return;
     }
     
@@ -693,7 +693,7 @@ function updateMainAlert(lowProducts) {
             `;
         });
         if(lowProducts.length > 3) {
-            html += <div style="text-align: center; color: #666; margin-top: 10px;">... و ${lowProducts.length - 3} منتجات أخرى</div>;
+            html += `<div style="text-align: center; color: #666; margin-top: 10px;">... و ${lowProducts.length - 3} منتجات أخرى</div>`;
         }
         alertContent.innerHTML = html;
     } else {
@@ -864,7 +864,7 @@ function exportToExcel() {
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "المخزون");
-    XLSX.writeFile(wb, مخزون_تمسية_${new Date().toLocaleDateString()}.xlsx);
+    XLSX.writeFile(wb, `مخزون_تمسية_${new Date().toLocaleDateString()}.xlsx`);
 }
 
 // إغلاق النوافذ بالنقر خارجها
