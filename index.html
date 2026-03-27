@@ -1,4 +1,3 @@
-<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
@@ -7,6 +6,8 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, sans-serif; }
         :root { --primary: #667eea; --danger: #dc3545; --warning: #ffc107; --success: #28a745; }
@@ -15,6 +16,7 @@
         header { background: linear-gradient(135deg, var(--primary), #764ba2); color: white; padding: 20px; text-align: center; position: relative; }
         .user-info { position: absolute; left: 20px; top: 50%; transform: translateY(-50%); display: flex; gap: 10px; align-items: center; background: rgba(255,255,255,0.2); padding: 10px 15px; border-radius: 25px; }
         .connection-status { position: absolute; right: 20px; top: 50%; transform: translateY(-50%); display: flex; align-items: center; gap: 5px; font-size: 12px; background: rgba(255,255,255,0.2); padding: 5px 10px; border-radius: 15px; }
+        .clock-display { position: absolute; left: 50%; top: 85%; transform: translateX(-50%); font-size: 14px; background: rgba(255,255,255,0.2); padding: 5px 15px; border-radius: 20px; }
         .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #28a745; animation: pulse 2s infinite; }
         .status-dot.offline { background: #dc3545; animation: none; }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
@@ -43,6 +45,7 @@
         .remaining-box { background: #e8f5e9; color: #2e7d32; padding: 8px 15px; border-radius: 8px; font-weight: bold; text-align: center; }
         .modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 2000; justify-content: center; align-items: center; backdrop-filter: blur(5px); }
         .modal-content { background: white; padding: 30px; border-radius: 15px; width: 90%; max-width: 500px; max-height: 80vh; overflow-y: auto; }
+        .modal-content.wide { max-width: 700px; }
         .welcome-alert { background: linear-gradient(135deg, #fff3cd 0%, #ffeeba 100%); border: 3px solid #ffc107; border-radius: 15px; padding: 25px; margin-bottom: 20px; }
         .welcome-alert.danger { background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%); border-color: #dc3545; }
         .alert-title { font-size: 20px; font-weight: bold; color: #856404; margin-bottom: 15px; display: flex; align-items: center; gap: 10px; }
@@ -52,6 +55,8 @@
         .btn-primary { background: var(--primary); color: white; } .btn-success { background: #28a745; color: white; }
         .btn-danger { background: #dc3545; color: white; } .btn-warning { background: #ffc107; color: #000; }
         .btn-secondary { background: #6c757d; color: white; } .btn-small { padding: 5px 10px; font-size: 12px; }
+        .btn-info { background: #17a2b8; color: white; }
+        .btn-pdf { background: #dc3545; color: white; }
         .icon-btn { background: rgba(255,255,255,0.3); border: none; color: white; width: 35px; height: 35px; border-radius: 50%; cursor: pointer; font-size: 18px; }
         .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; margin-bottom: 20px; }
         .input-group { display: flex; flex-direction: column; }
@@ -64,8 +69,18 @@
         .loading { text-align: center; padding: 40px; color: var(--primary); font-size: 18px; }
         .login-box { max-width: 400px; margin: 100px auto; background: white; padding: 40px; border-radius: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
         .sync-info { background: #e3f2fd; padding: 10px; border-radius: 8px; margin-bottom: 20px; font-size: 14px; color: #1976d2; border-right: 4px solid #2196f3; }
-        @media (max-width: 768px) { .user-info, .connection-status { position: static; transform: none; margin: 10px auto; } header { padding-top: 10px; } .log-item { flex-direction: column; align-items: flex-start; } }
+        .multi-product-row { background: #f8f9fa; padding: 15px; border-radius: 10px; margin-bottom: 10px; border: 2px solid #dee2e6; }
+        .multi-product-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .remove-btn { background: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer; }
+        .category-icon { cursor: pointer; padding: 10px; border-radius: 8px; transition: all 0.3s; background: #f8f9fa; border: 2px solid transparent; }
+        .category-icon:hover { background: #e3f2fd; border-color: var(--primary); }
+        .category-input-group { display: flex; gap: 10px; align-items: center; }
+        .category-input-group select { flex: 1; }
+        .category-input-group input { flex: 1; display: none; }
+        .category-toggle { background: #6c757d; color: white; border: none; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 12px; }
+        @media (max-width: 768px) { .user-info, .connection-status, .clock-display { position: static; transform: none; margin: 10px auto; } header { padding-top: 10px; } .log-item { flex-direction: column; align-items: flex-start; } }
     </style>
+<base target="_blank">
 </head>
 <body>
 
@@ -87,6 +102,44 @@
         <div style="display: flex; gap: 10px;">
             <button class="btn btn-primary" style="flex: 1;" onclick="changePassword()">حفظ</button>
             <button class="btn btn-secondary" onclick="closePasswordModal()">إلغاء</button>
+        </div>
+    </div>
+</div>
+
+<!-- نافذة إضافة منتجات متعددة -->
+<div id="multiProductModal" class="modal">
+    <div class="modal-content wide">
+        <h3 style="margin-bottom: 20px;">📦 إضافة منتجات متعددة</h3>
+        <div class="input-group" style="margin-bottom: 15px;">
+            <label>📁 الفئة المختارة</label>
+            <div class="category-input-group">
+                <select id="multiCategory">
+                    <option value="informatique">💻 إعلاميات</option>
+                    <option value="bureau">🪑 أثاث المكتب</option>
+                    <option value="kitab">📚 خاص بالمكتب</option>
+                    <option value="cleaning">🧹 تنظيف</option>
+                    <option value="other">⚙️ أخرى</option>
+                </select>
+                <input type="text" id="multiCategoryInput" placeholder="فئة جديدة...">
+                <button class="category-toggle" onclick="toggleMultiCategoryInput()">✏️ جديد</button>
+            </div>
+            <small style="color: #666; margin-top: 5px;">جميع المنتجات ستُضاف لهذه الفئة</small>
+        </div>
+        <div class="input-group" style="margin-bottom: 15px;">
+            <label>📍 موقع التخزين (لجميع المنتجات)</label>
+            <input type="text" id="multiLocation" placeholder="المستودع أ">
+        </div>
+        <div class="input-group" style="margin-bottom: 15px;">
+            <label>⚠️ الحد الأدنى للتنبيه (افتراضي)</label>
+            <input type="number" id="multiMin" value="10" min="1">
+        </div>
+        <div id="multiProductsList">
+            <!-- المنتجات تُضاف هنا -->
+        </div>
+        <button class="btn btn-info" onclick="addMultiProductRow()" style="width: 100%; margin: 15px 0;">➕ إضافة منتج آخر</button>
+        <div style="display: flex; gap: 10px;">
+            <button class="btn btn-primary" style="flex: 1;" onclick="saveMultiProducts()">💾 حفظ جميع المنتجات</button>
+            <button class="btn btn-secondary" onclick="closeMultiProductModal()">إلغاء</button>
         </div>
     </div>
 </div>
@@ -116,9 +169,10 @@
 <div id="app" class="container" style="display: none;">
     <header>
         <div>
-            <h1>☁️ Gestion Stock Cloud</h1>
-            <p style="opacity: 0.9; font-size: 14px;">جماعة تمسية - النظام السحابي للمخزون</p>
+            <h1>☁️ Gestion de Stock</h1>
+            <p style="opacity: 0.9; font-size: 14px;">جماعة تمسية</p>
         </div>
+        <div class="clock-display" id="gmtClock">🕐 جاري التحميل...</div>
         <div class="connection-status">
             <div class="status-dot" id="statusDot"></div>
             <span id="statusText">متصل</span>
@@ -160,20 +214,25 @@
         </div>
         
         <div id="mainAlert" class="welcome-alert" style="display: none;">
-            <div class="alert-title danger">⚠️ تنبيه: منتجات قرب يسالو من المخزون!</div>
+            <div class="alert-title danger">⚠️ المخزون على وشك الانتهاء</div>
             <div id="mainAlertContent"></div>
         </div>
         
         <div class="form-grid" style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
             <div class="input-group">
                 <label>📁 الفئة</label>
-                <select id="category">
-                    <option value="informatique">💻 إعلاميات</option>
-                    <option value="bureau">🪑 أثاث المكتب</option>
-                    <option value="kitab">📚 خاص بالمكتب</option>
-                    <option value="cleaning">🧹 تنظيف</option>
-                    <option value="other">⚙️ أخرى</option>
-                </select>
+                <div class="category-input-group">
+                    <select id="category" style="flex: 1;">
+                        <option value="informatique">💻 إعلاميات</option>
+                        <option value="bureau">🪑 أثاث المكتب</option>
+                        <option value="kitab">📚 خاص بالمكتب</option>
+                        <option value="cleaning">🧹 تنظيف</option>
+                        <option value="other">⚙️ أخرى</option>
+                    </select>
+                    <input type="text" id="categoryInput" placeholder="فئة جديدة..." style="display: none;">
+                    <button class="category-toggle" onclick="toggleCategoryInput()">✏️ جديد</button>
+                    <button class="btn btn-info" onclick="openMultiProductModalFromCategory()" title="إضافة منتجات متعددة لهذه الفئة">📦+</button>
+                </div>
             </div>
             <div class="input-group">
                 <label>🏷️ اسم المنتج</label>
@@ -197,6 +256,7 @@
         <div style="margin-bottom: 20px;">
             <button class="btn btn-primary" onclick="addProduct()">➕ إضافة للمخزون</button>
             <button class="btn btn-success" onclick="exportToExcel()">📊 Excel</button>
+            <button class="btn btn-pdf" onclick="exportToPDF()">📄 PDF</button>
             <button class="btn btn-secondary" onclick="syncData()">🔄 تحديث</button>
         </div>
         
@@ -293,7 +353,7 @@
     
     <!-- التنبيهات -->
     <div id="alertsTab" class="tab-content">
-        <h3 style="margin-bottom: 20px; color: #dc3545;">⚠️ منتجات تحتاج انتباهك</h3>
+        <h3 style="margin-bottom: 20px; color: #dc3545;">⚠️ المخزون على وشك الانتهاء</h3>
         <div id="alertsList">
             <div class="loading">⏳ جاري التحميل...</div>
         </div>
@@ -303,9 +363,9 @@
 <script>
 // ⚠️ إعدادات Firebase - استخدم الرابط اللي عطيتيني
 const firebaseConfig = {
-    apiKey: "AIzaSyDummyKeyForStockTemsia123456789", // API Key (يمكن تغييره لاحقاً)
+    apiKey: "AIzaSyDummyKeyForStockTemsia123456789",
     authDomain: "stock-temsia.firebaseapp.com",
-    databaseURL: "https://stock-temsia-default-rtdb.firebaseio.com/", // الرابط ديالك
+    databaseURL: "https://stock-temsia-default-rtdb.firebaseio.com/",
     projectId: "stock-temsia",
     storageBucket: "stock-temsia.appspot.com",
     messagingSenderId: "123456789",
@@ -317,15 +377,64 @@ let app, database;
 let currentUser = null;
 let products = [];
 let deliveries = [];
-let userPasswords = {}; // تخزين مؤقت للباسوردات
+let userPasswords = {};
+let customCategories = []; // الفئات المخصصة
 
 try {
     app = firebase.initializeApp(firebaseConfig);
     database = firebase.database();
     console.log("✅ متصل بـ Firebase:", firebaseConfig.databaseURL);
+    
+    // تحميل الفئات المخصصة
+    loadCustomCategories();
 } catch(e) {
     console.error("❌ خطأ في الاتصال:", e);
     alert("⚠️ خطأ في الاتصال بقاعدة البيانات");
+}
+
+// تحميل الفئات المخصصة من Firebase
+function loadCustomCategories() {
+    if(!database) return;
+    database.ref('categories').on('value', (snapshot) => {
+        customCategories = [];
+        snapshot.forEach((child) => {
+            customCategories.push({ id: child.key, name: child.val().name });
+        });
+        updateCategorySelects();
+    });
+}
+
+// تحديث قوائم الفئات
+function updateCategorySelects() {
+    const selects = ['category', 'multiCategory'];
+    selects.forEach(selectId => {
+        const select = document.getElementById(selectId);
+        if(!select) return;
+        
+        // حفظ القيمة المختارة
+        const selectedValue = select.value;
+        
+        // إعادة بناء القائمة
+        let html = `
+            <option value="informatique">💻 إعلاميات</option>
+            <option value="bureau">🪑 أثاث المكتب</option>
+            <option value="kitab">📚 خاص بالمكتب</option>
+            <option value="cleaning">🧹 تنظيف</option>
+            <option value="other">⚙️ أخرى</option>
+        `;
+        
+        // إضافة الفئات المخصصة
+        customCategories.forEach(cat => {
+            html += `<option value="${cat.id}">📁 ${cat.name}</option>`;
+        });
+        
+        select.innerHTML = html;
+        
+        // استعادة القيمة المختارة إذا كانت موجودة
+        if(selectedValue) {
+            select.value = selectedValue;
+        }
+    });
 }
 
 // مراقبة حالة الاتصال
@@ -342,6 +451,102 @@ if(database) {
             text.textContent = 'غير متصل ❌';
         }
     });
+}
+
+// تحديث الساعة GMT
+function updateClock() {
+    const now = new Date();
+    const gmtTime = now.toLocaleTimeString('ar-MA', { 
+        timeZone: 'UTC',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+    });
+    const gmtDate = now.toLocaleDateString('ar-MA', { 
+        timeZone: 'UTC',
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+    });
+    document.getElementById('gmtClock').textContent = `🕐 ${gmtTime} GMT | ${gmtDate}`;
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// تبديل إدخال الفئة
+let usingCustomCategory = false;
+let usingMultiCustomCategory = false;
+
+function toggleCategoryInput() {
+    const select = document.getElementById('category');
+    const input = document.getElementById('categoryInput');
+    const btn = event.target;
+    
+    usingCustomCategory = !usingCustomCategory;
+    
+    if(usingCustomCategory) {
+        select.style.display = 'none';
+        input.style.display = 'block';
+        input.focus();
+        btn.textContent = '📋 قائمة';
+    } else {
+        select.style.display = 'block';
+        input.style.display = 'none';
+        btn.textContent = '✏️ جديد';
+    }
+}
+
+function toggleMultiCategoryInput() {
+    const select = document.getElementById('multiCategory');
+    const input = document.getElementById('multiCategoryInput');
+    const btn = event.target;
+    
+    usingMultiCustomCategory = !usingMultiCustomCategory;
+    
+    if(usingMultiCustomCategory) {
+        select.style.display = 'none';
+        input.style.display = 'block';
+        input.focus();
+        btn.textContent = '📋 قائمة';
+    } else {
+        select.style.display = 'block';
+        input.style.display = 'none';
+        btn.textContent = '✏️ جديد';
+    }
+}
+
+// الحصول على الفئة المختارة
+function getSelectedCategory() {
+    if(usingCustomCategory) {
+        const customCat = document.getElementById('categoryInput').value.trim();
+        return customCat || 'other';
+    }
+    return document.getElementById('category').value;
+}
+
+function getMultiSelectedCategory() {
+    if(usingMultiCustomCategory) {
+        const customCat = document.getElementById('multiCategoryInput').value.trim();
+        return customCat || 'other';
+    }
+    return document.getElementById('multiCategory').value;
+}
+
+// حفظ فئة جديدة
+function saveNewCategory(categoryName) {
+    if(!database || !categoryName) return Promise.resolve(categoryName);
+    
+    // التحقق إذا كانت الفئة من القائمة الأساسية
+    const basicCategories = ['informatique', 'bureau', 'kitab', 'cleaning', 'other'];
+    if(basicCategories.includes(categoryName)) return Promise.resolve(categoryName);
+    
+    // التحقق إذا كانت الفئة موجودة مسبقاً
+    const existing = customCategories.find(c => c.name === categoryName);
+    if(existing) return Promise.resolve(existing.id);
+    
+    // حفظ الفئة الجديدة
+    const catRef = database.ref('categories').push();
+    return catRef.set({ name: categoryName }).then(() => catRef.key);
 }
 
 function login() {
@@ -382,6 +587,9 @@ function logout() {
 
 function openPasswordModal() {
     document.getElementById('passwordModal').style.display = 'flex';
+    document.getElementById('currentPassword').value = '';
+    document.getElementById('newPassword').value = '';
+    document.getElementById('confirmPassword').value = '';
 }
 
 function closePasswordModal() {
@@ -411,6 +619,164 @@ function changePassword() {
     userPasswords[currentUser.name] = newPass;
     alert('✅ تم تغيير الباسورد بنجاح!');
     closePasswordModal();
+}
+
+// ===== إضافة منتجات متعددة =====
+let multiProductRows = [];
+
+// فتح النافذة مع الفئة المحددة من حقل الفئة
+function openMultiProductModalFromCategory() {
+    const selectedLocation = document.getElementById('pLocation').value;
+    
+    // نسخ الفئة المختارة
+    if(usingCustomCategory) {
+        const customCat = document.getElementById('categoryInput').value.trim();
+        if(customCat) {
+            document.getElementById('multiCategoryInput').value = customCat;
+            usingMultiCustomCategory = true;
+            document.getElementById('multiCategory').style.display = 'none';
+            document.getElementById('multiCategoryInput').style.display = 'block';
+        }
+    } else {
+        document.getElementById('multiCategory').value = document.getElementById('category').value;
+    }
+    
+    if(selectedLocation) {
+        document.getElementById('multiLocation').value = selectedLocation;
+    }
+    
+    document.getElementById('multiProductModal').style.display = 'flex';
+    multiProductRows = [];
+    document.getElementById('multiProductsList').innerHTML = '';
+    addMultiProductRow();
+}
+
+function openMultiProductModal() {
+    document.getElementById('multiProductModal').style.display = 'flex';
+    multiProductRows = [];
+    document.getElementById('multiProductsList').innerHTML = '';
+    addMultiProductRow();
+}
+
+function closeMultiProductModal() {
+    document.getElementById('multiProductModal').style.display = 'none';
+}
+
+function addMultiProductRow() {
+    const rowId = Date.now() + Math.random();
+    multiProductRows.push(rowId);
+    
+    const rowDiv = document.createElement('div');
+    rowDiv.className = 'multi-product-row';
+    rowDiv.id = `row-${rowId}`;
+    rowDiv.innerHTML = `
+        <div class="multi-product-header">
+            <strong>منتج #${multiProductRows.length}</strong>
+            ${multiProductRows.length > 1 ? `<button class="remove-btn" onclick="removeMultiProductRow('${rowId}')">🗑️ حذف</button>` : ''}
+        </div>
+        <div class="form-grid" style="grid-template-columns: 2fr 1fr 1fr; gap: 10px;">
+            <div class="input-group">
+                <label>🏷️ اسم المنتج</label>
+                <input type="text" class="mp-name" placeholder="مثال: ورق A4">
+            </div>
+            <div class="input-group">
+                <label>📊 الكمية</label>
+                <input type="number" class="mp-qty" placeholder="0" min="0">
+            </div>
+            <div class="input-group">
+                <label>⚠️ الحد الأدنى</label>
+                <input type="number" class="mp-min" value="10" min="1">
+            </div>
+        </div>
+    `;
+    
+    document.getElementById('multiProductsList').appendChild(rowDiv);
+}
+
+function removeMultiProductRow(rowId) {
+    const index = multiProductRows.indexOf(rowId);
+    if(index > -1) {
+        multiProductRows.splice(index, 1);
+        document.getElementById(`row-${rowId}`).remove();
+        // تحديث الأرقام
+        const rows = document.querySelectorAll('#multiProductsList .multi-product-row');
+        rows.forEach((row, i) => {
+            row.querySelector('.multi-product-header strong').textContent = `منتج #${i + 1}`;
+        });
+    }
+}
+
+function saveMultiProducts() {
+    if(!database || !currentUser) {
+        alert('⚠️ لا يوجد اتصال');
+        return;
+    }
+    
+    const categoryValue = getMultiSelectedCategory();
+    const location = document.getElementById('multiLocation').value.trim();
+    const defaultMin = parseInt(document.getElementById('multiMin').value);
+    
+    const rows = document.querySelectorAll('#multiProductsList .multi-product-row');
+    const productsToAdd = [];
+    
+    rows.forEach(row => {
+        const name = row.querySelector('.mp-name').value.trim();
+        const qty = parseInt(row.querySelector('.mp-qty').value);
+        const min = parseInt(row.querySelector('.mp-min').value) || defaultMin;
+        
+        if(name && !isNaN(qty) && qty >= 0) {
+            productsToAdd.push({ name, qty, min });
+        }
+    });
+    
+    if(productsToAdd.length === 0) {
+        alert('الرجاء إدخال منتج واحد على الأقل بشكل صحيح');
+        return;
+    }
+    
+    // حفظ الفئة الجديدة إذا لزم الأمر
+    saveNewCategory(categoryValue).then((finalCategory) => {
+        let addedCount = 0;
+        let updatedCount = 0;
+        
+        const promises = productsToAdd.map(product => {
+            // البحث عن منتج بنفس الاسم (غير حساس لحالة الأحرف)
+            const existingProduct = products.find(p => p.name.toLowerCase() === product.name.toLowerCase());
+            
+            if(existingProduct) {
+                // تحديث الكمية - إضافة الجديد إلى القديم
+                const newQty = existingProduct.qty + product.qty;
+                return database.ref('products/' + existingProduct.id).update({
+                    qty: newQty,
+                    lastModified: firebase.database.ServerValue.TIMESTAMP
+                }).then(() => {
+                    updatedCount++;
+                });
+            } else {
+                // إضافة منتج جديد مع الفئة المختارة
+                const newProductRef = database.ref('products').push();
+                return newProductRef.set({
+                    name: product.name,
+                    qty: product.qty,
+                    min: product.min,
+                    cat: finalCategory,
+                    loc: location,
+                    createdBy: currentUser.name,
+                    createdAt: firebase.database.ServerValue.TIMESTAMP,
+                    lastModified: firebase.database.ServerValue.TIMESTAMP
+                }).then(() => {
+                    addedCount++;
+                });
+            }
+        });
+        
+        return Promise.all(promises).then(() => {
+            alert(`✅ تمت العملية بنجاح!\n➕ منتجات جديدة: ${addedCount}\n🔄 منتجات مُحدثة (زيادة كمية): ${updatedCount}`);
+            closeMultiProductModal();
+        });
+    }).catch(err => {
+        alert('❌ خطأ: ' + err.message);
+    });
 }
 
 function switchTab(tab) {
@@ -467,6 +833,7 @@ function syncData() {
     }, 1000);
 }
 
+// ===== إضافة منتج مع التحقق من الاسم الموجود =====
 function addProduct() {
     if(!database || !currentUser) {
         alert('⚠️ لا يوجد اتصال');
@@ -476,7 +843,7 @@ function addProduct() {
     const name = document.getElementById('pName').value.trim();
     const qty = parseInt(document.getElementById('pQty').value);
     const min = parseInt(document.getElementById('pMin').value);
-    const cat = document.getElementById('category').value;
+    const cat = getSelectedCategory();
     const loc = document.getElementById('pLocation').value.trim();
     
     if(!name || isNaN(qty)) {
@@ -484,20 +851,45 @@ function addProduct() {
         return;
     }
     
-    const newProductRef = database.ref('products').push();
-    newProductRef.set({
-        name: name,
-        qty: qty,
-        min: min,
-        cat: cat,
-        loc: loc,
-        createdBy: currentUser.name,
-        createdAt: firebase.database.ServerValue.TIMESTAMP,
-        lastModified: firebase.database.ServerValue.TIMESTAMP
-    }).then(() => {
-        alert(`✅ تم إضافة ${name} للمخزون السحابي بنجاح!`);
-        document.getElementById('pName').value = '';
-        document.getElementById('pQty').value = '';
+    // حفظ الفئة الجديدة إذا لزم الأمر
+    saveNewCategory(cat).then((finalCategory) => {
+        // البحث عن منتج بنفس الاسم (غير حساس لحالة الأحرف)
+        const existingProduct = products.find(p => p.name.toLowerCase() === name.toLowerCase());
+        
+        if(existingProduct) {
+            // إذا وجد منتج بنفس الاسم، أضف الكمية الجديدة إلى القديمة
+            const newQty = existingProduct.qty + qty;
+            
+            if(!confirm(`⚠️ المنتج "${name}" موجود بالفعل!\n\nالكمية الحالية: ${existingProduct.qty}\nالكمية الجديدة: ${qty}\nالإجمالي: ${newQty}\n\nهل تريد إضافة الكمية الجديدة إلى المخزون القديم؟`)) {
+                return;
+            }
+            
+            return database.ref('products/' + existingProduct.id).update({
+                qty: newQty,
+                lastModified: firebase.database.ServerValue.TIMESTAMP
+            }).then(() => {
+                alert(`✅ تم تحديث المخزون!\n\nالمنتج: ${name}\nالكمية القديمة: ${existingProduct.qty}\nالكمية المضافة: ${qty}\nالإجمالي الجديد: ${newQty}`);
+                document.getElementById('pName').value = '';
+                document.getElementById('pQty').value = '';
+            });
+        } else {
+            // إضافة منتج جديد
+            const newProductRef = database.ref('products').push();
+            return newProductRef.set({
+                name: name,
+                qty: qty,
+                min: min,
+                cat: finalCategory,
+                loc: loc,
+                createdBy: currentUser.name,
+                createdAt: firebase.database.ServerValue.TIMESTAMP,
+                lastModified: firebase.database.ServerValue.TIMESTAMP
+            }).then(() => {
+                alert(`✅ تم إضافة ${name} للمخزون السحابي بنجاح!`);
+                document.getElementById('pName').value = '';
+                document.getElementById('pQty').value = '';
+            });
+        }
     }).catch(err => {
         alert('❌ خطأ: ' + err.message);
     });
@@ -721,7 +1113,7 @@ function showWelcomeAlert() {
         
         let html = `
             <div class="alert-title danger">
-                ⚠️ تنبيه: ${lowProducts.length} منتجات قرب يسالو من المخزون!
+                ⚠️ المخزون على وشك الانتهاء
             </div>
             <div style="margin-bottom: 15px;">
                 <span style="background: #dc3545; color: white; padding: 5px 15px; border-radius: 20px; margin-left: 10px;">نفذت: ${nafiz}</span>
@@ -762,6 +1154,10 @@ function closeWelcome() {
 }
 
 function getCatName(cat) {
+    // البحث في الفئات المخصصة أولاً
+    const customCat = customCategories.find(c => c.id === cat);
+    if(customCat) return `📁 ${customCat.name}`;
+    
     const map = {
         informatique: '💻 إعلاميات',
         bureau: '🪑 أثاث المكتب',
@@ -769,7 +1165,7 @@ function getCatName(cat) {
         cleaning: '🧹 تنظيف',
         other: '⚙️ أخرى'
     };
-    return map[cat] || cat;
+    return map[cat] || `📁 ${cat}`;
 }
 
 function quickDelivery(pid) {
@@ -850,10 +1246,13 @@ function renderAlerts() {
     }).join('');
 }
 
+// ===== تصدير Excel مع عنوان في الوسط =====
 function exportToExcel() {
+    const title = `مخزون جماعة تمسية - ${new Date().toLocaleDateString('ar-MA')}`;
+    
     const data = products.map(p => ({
         'الحالة': p.qty === 0 ? 'نفذ' : p.qty <= p.min ? 'منخفض' : 'متوفر',
-        'الفئة': getCatName(p.cat).replace(/[^\w\s\u0600-\u06FF]/g, ''),
+        'الفئة': getCatName(p.cat).replace(/^[^\w\s\u0600-\u06FF]+\s*/, ''),
         'المنتج': p.name,
         'المتوفر': p.qty,
         'الحد الأدنى': p.min,
@@ -861,10 +1260,197 @@ function exportToExcel() {
         'بواسطة': p.createdBy || '-'
     }));
     
-    const ws = XLSX.utils.json_to_sheet(data);
+    // إنشاء ورقة العمل
+    const ws = XLSX.utils.json_to_sheet([]);
+    
+    // إضافة العنوان في الصف الأول
+    XLSX.utils.sheet_add_aoa(ws, [[title]], { origin: 'A1' });
+    
+    // إضافة الصف الفارغ
+    XLSX.utils.sheet_add_aoa(ws, [[]], { origin: 'A2' });
+    
+    // إضافة البيانات
+    XLSX.utils.sheet_add_json(ws, data, { origin: 'A3', skipHeader: false });
+    
+    // دمج خلايا العنوان (7 أعمدة)
+    ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 6 } }];
+    
+    // تعيين عرض الأعمدة
+    ws['!cols'] = [
+        { wch: 12 },  // الحالة
+        { wch: 18 },  // الفئة
+        { wch: 25 },  // المنتج
+        { wch: 12 },  // المتوفر
+        { wch: 12 },  // الحد الأدنى
+        { wch: 15 },  // الموقع
+        { wch: 15 }   // بواسطة
+    ];
+    
+    // تنسيق العنوان
+    ws['A1'].s = {
+        font: { bold: true, sz: 16, color: { rgb: 'FFFFFF' }, name: 'Arial' },
+        fill: { fgColor: { rgb: '667EEA' } },
+        alignment: { horizontal: 'center', vertical: 'center' }
+    };
+    
+    // تنسيق رأس الجدول (الصف 3)
+    const headers = ['A3', 'B3', 'C3', 'D3', 'E3', 'F3', 'G3'];
+    headers.forEach(cell => {
+        if(ws[cell]) {
+            ws[cell].s = {
+                font: { bold: true, sz: 12, color: { rgb: 'FFFFFF' } },
+                fill: { fgColor: { rgb: '764BA2' } },
+                alignment: { horizontal: 'center', vertical: 'center' }
+            };
+        }
+    });
+    
+    // تنسيق ارتفاع الصفوف
+    ws['!rows'] = [{ hpt: 30 }, { hpt: 5 }, { hpt: 25 }];
+    
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "المخزون");
     XLSX.writeFile(wb, `مخزون_تمسية_${new Date().toLocaleDateString()}.xlsx`);
+}
+
+// ===== تصدير PDF باستخدام طريقة بديلة =====
+function exportToPDF() {
+    try {
+        // إنشاء نافذة جديدة للطباعة
+        const printWindow = window.open('', '_blank');
+        if(!printWindow) {
+            alert('⚠️ يرجى السماح بفتح النوافذ المنبثقة لتصدير PDF');
+            return;
+        }
+        
+        const title = `مخزون جماعة تمسية - ${new Date().toLocaleDateString('ar-MA')}`;
+        
+        let tableRows = '';
+        products.forEach(p => {
+            const status = p.qty === 0 ? 'نفذ' : p.qty <= p.min ? 'منخفض' : 'متوفر';
+            const statusColor = p.qty === 0 ? '#dc3545' : p.qty <= p.min ? '#ff9800' : '#28a745';
+            tableRows += `
+                <tr>
+                    <td style="border: 1px solid #ddd; padding: 8px; text-align: center; color: ${statusColor}; font-weight: bold;">${status}</td>
+                    <td style="border: 1px solid #ddd; padding: 8px; text-align: center;">${getCatName(p.cat).replace(/^[^\w\s\u0600-\u06FF]+\s*/, '')}</td>
+                    <td style="border: 1px solid #ddd; padding: 8px; text-align: center; font-weight: bold;">${p.name}</td>
+                    <td style="border: 1px solid #ddd; padding: 8px; text-align: center;">${p.qty}</td>
+                    <td style="border: 1px solid #ddd; padding: 8px; text-align: center;">${p.min}</td>
+                    <td style="border: 1px solid #ddd; padding: 8px; text-align: center;">${p.loc || '-'}</td>
+                    <td style="border: 1px solid #ddd; padding: 8px; text-align: center;">${p.createdBy || '-'}</td>
+                </tr>
+            `;
+        });
+        
+        const nafizCount = products.filter(p => p.qty === 0).length;
+        const lowCount = products.filter(p => p.qty > 0 && p.qty <= p.min).length;
+        
+        printWindow.document.write(`
+            <!DOCTYPE html>
+            <html dir="rtl">
+            <head>
+                <meta charset="UTF-8">
+                <title>${title}</title>
+                <style>
+                    @import url('https://fonts.googleapis.com/css2?family=Noto+Naskh+Arabic:wght@400;700&display=swap');
+                    * { font-family: 'Noto Naskh Arabic', 'Segoe UI', Tahoma, sans-serif; }
+                    body { margin: 20px; direction: rtl; }
+                    .header { 
+                        background: linear-gradient(135deg, #667eea, #764ba2); 
+                        color: white; 
+                        padding: 20px; 
+                        text-align: center; 
+                        border-radius: 10px; 
+                        margin-bottom: 20px;
+                    }
+                    .header h1 { margin: 0; font-size: 24px; }
+                    .header p { margin: 5px 0 0 0; opacity: 0.9; }
+                    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+                    th { 
+                        background: #764ba2; 
+                        color: white; 
+                        padding: 12px; 
+                        text-align: center; 
+                        border: 1px solid #ddd;
+                    }
+                    td { border: 1px solid #ddd; padding: 10px; text-align: center; }
+                    tr:nth-child(even) { background: #f8f9fa; }
+                    .summary { 
+                        margin-top: 20px; 
+                        padding: 15px; 
+                        background: #f8f9fa; 
+                        border-radius: 8px;
+                        display: flex;
+                        justify-content: space-around;
+                    }
+                    .summary-item { text-align: center; }
+                    .summary-item strong { display: block; font-size: 24px; }
+                    .print-btn {
+                        background: #667eea;
+                        color: white;
+                        border: none;
+                        padding: 15px 30px;
+                        font-size: 16px;
+                        border-radius: 8px;
+                        cursor: pointer;
+                        margin: 20px auto;
+                        display: block;
+                    }
+                    @media print {
+                        .print-btn { display: none; }
+                        body { margin: 0; }
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <h1>${title}</h1>
+                    <p>جماعة تمسية - Gestion de Stock</p>
+                </div>
+                
+                <button class="print-btn" onclick="window.print()">🖨️ طباعة / حفظ كـ PDF</button>
+                
+                <table>
+                    <thead>
+                        <tr>
+                            <th>الحالة</th>
+                            <th>الفئة</th>
+                            <th>المنتج</th>
+                            <th>المتوفر</th>
+                            <th>الحد الأدنى</th>
+                            <th>الموقع</th>
+                            <th>بواسطة</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${tableRows}
+                    </tbody>
+                </table>
+                
+                <div class="summary">
+                    <div class="summary-item">
+                        <strong style="color: #667eea;">${products.length}</strong>
+                        <span>إجمالي المنتجات</span>
+                    </div>
+                    <div class="summary-item">
+                        <strong style="color: #dc3545;">${nafizCount}</strong>
+                        <span>نفذت الكمية</span>
+                    </div>
+                    <div class="summary-item">
+                        <strong style="color: #ff9800;">${lowCount}</strong>
+                        <span>شارفت على النفاذ</span>
+                    </div>
+                </div>
+            </body>
+            </html>
+        `);
+        
+        printWindow.document.close();
+        
+    } catch(err) {
+        console.error('PDF Error:', err);
+        alert('❌ خطأ في تصدير PDF: ' + err.message);
+    }
 }
 
 // إغلاق النوافذ بالنقر خارجها
@@ -876,4 +1462,3 @@ window.onclick = function(e) {
 </script>
 
 </body>
-</html>
